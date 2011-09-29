@@ -1,5 +1,8 @@
 package javax.datagrid;
 
+import javax.datagrid.mapreduce.Filter;
+import javax.datagrid.mapreduce.Mapper;
+import javax.datagrid.mapreduce.Reducer;
 import java.io.Serializable;
 import java.util.concurrent.Future;
 
@@ -25,4 +28,10 @@ public interface DataGrid {
 
   <K extends Serializable, V extends Serializable> Future<V> asyncTake(K key);
 
+  // distributed processing
+  <ResultType extends Serializable> ResultType map(Mapper<ResultType> mapper,
+                                                  Reducer<ResultType> reducer);
+  <ResultType extends Serializable> ResultType map(Mapper<ResultType> mapper,
+                                                  Reducer<ResultType> reducer,
+                                                  Filter filter);
 }

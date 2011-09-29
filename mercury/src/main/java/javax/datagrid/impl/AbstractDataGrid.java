@@ -2,11 +2,14 @@ package javax.datagrid.impl;
 
 import javax.datagrid.DataGrid;
 import javax.datagrid.DataGridException;
+import javax.datagrid.mapreduce.Filter;
 import java.io.Serializable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
 public abstract class AbstractDataGrid implements DataGrid {
+  protected static final Filter ACCEPT_ALL_FILTER=new Filter();
+
   @SuppressWarnings({"unchecked"})
   @Override
   public <K extends Serializable, V extends Serializable> V read(K key) {

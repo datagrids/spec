@@ -3,8 +3,13 @@ package javax.datagrid.transientdatagrid;
 import javax.datagrid.DataGrid;
 import javax.datagrid.DataGridEntry;
 import javax.datagrid.impl.AbstractDataGrid;
+import javax.datagrid.mapreduce.Filter;
+import javax.datagrid.mapreduce.Mapper;
+import javax.datagrid.mapreduce.Reducer;
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
@@ -59,9 +64,9 @@ public class TransientDataGrid extends AbstractDataGrid {
     if (data.size() > ceilingBeforeScan) {
       scanForExpiredEntries();
     }
-    long expirationTime=expiry;
-    if(expiry!=DataGrid.FOREVER) {
-      expirationTime=System.currentTimeMillis()+expiry;
+    long expirationTime = expiry;
+    if (expiry != DataGrid.FOREVER) {
+      expirationTime = System.currentTimeMillis() + expiry;
     }
     DataGridEntry dataGridEntry = new DataGridEntry<V>(value, expirationTime);
     data.put(key, dataGridEntry);
@@ -75,7 +80,7 @@ public class TransientDataGrid extends AbstractDataGrid {
     }
     @SuppressWarnings({"unchecked"})
     DataGridEntry<V> dataGridEntry = data.get(key);
-    if (dataGridEntry!=null && dataGridEntry.isExpired()) {
+    if (dataGridEntry != null && dataGridEntry.isExpired()) {
       data.remove(key);
       dataGridEntry = null;
     }
@@ -99,6 +104,27 @@ public class TransientDataGrid extends AbstractDataGrid {
 
     V payload = (dataGridEntry == null ? null : dataGridEntry.getPayload());
     return new TransientDataGridFuture<V>(payload);
+  }
+
+  @Override
+  public <ResultType extends Serializable> ResultType map(Mapper<ResultType> mapper, Reducer<ResultType> reducer) {
+    return map(mapper, reducer, ACCEPT_ALL_FILTER);
+  }
+
+  @Override
+  public <ResultType extends Serializable> ResultType map(Mapper<ResultType> mapper, Reducer<ResultType> reducer,
+                                                         Filter filter) {
+    List<ResultType> results = new ArrayList<ResultType>();
+    for (Serializable key : data.keySet()) {
+      Serializable value = read(key);
+      // make sure it's live data
+      if (value != null) {
+        if (filter.acceptable(key, value)) {
+          results.add(mapper.execute(value));
+        }
+      }
+    }
+    return reducer.reduce(results);
   }
 }
 
