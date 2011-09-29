@@ -15,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
 
 public class TransientDataGrid extends AbstractDataGrid {
-  Map<Serializable, DataGridEntry> data = new ConcurrentHashMap<Serializable, DataGridEntry>();
+  Map<Serializable, DataGridEntry<Serializable>> data = new ConcurrentHashMap<Serializable, DataGridEntry<Serializable>>();
   /**
    * This field indicates how many entries can exist in the map before each access triggers
    * a scan for expired entries. Thus, if the "data grid" has more than this number of entries,
@@ -28,31 +28,27 @@ public class TransientDataGrid extends AbstractDataGrid {
   private int ceilingBeforeScan = 1000;
   private long defaultExpiry = DataGrid.DEFAULT_EXPIRY;
 
-  @SuppressWarnings({"UnusedDeclaration"})
   public int getCeilingBeforeScan() {
     return ceilingBeforeScan;
   }
 
-  @SuppressWarnings({"UnusedDeclaration"})
   public void setCeilingBeforeScan(int ceilingBeforeScan) {
     this.ceilingBeforeScan = ceilingBeforeScan;
   }
 
-  @SuppressWarnings({"UnusedDeclaration"})
   public long getDefaultExpiry() {
     return defaultExpiry;
   }
 
-  @SuppressWarnings({"UnusedDeclaration"})
   public void setDefaultExpiry(long defaultExpiry) {
     this.defaultExpiry = defaultExpiry;
   }
 
   private void scanForExpiredEntries() {
     long now = System.currentTimeMillis();
-    Iterator<Map.Entry<Serializable, DataGridEntry>> iterator = data.entrySet().iterator();
+    Iterator<Map.Entry<Serializable, DataGridEntry<Serializable>>> iterator = data.entrySet().iterator();
     while (iterator.hasNext()) {
-      Map.Entry<Serializable, DataGridEntry> entry = iterator.next();
+      Map.Entry<Serializable, DataGridEntry<Serializable>> entry = iterator.next();
       if (entry.getValue().getExpirationTime() < now) {
         iterator.remove();
       }
@@ -68,7 +64,7 @@ public class TransientDataGrid extends AbstractDataGrid {
     if (expiry != DataGrid.FOREVER) {
       expirationTime = System.currentTimeMillis() + expiry;
     }
-    DataGridEntry dataGridEntry = new DataGridEntry<V>(value, expirationTime);
+    DataGridEntry<Serializable> dataGridEntry = new DataGridEntry<Serializable>(value, expirationTime);
     data.put(key, dataGridEntry);
     return new TransientDataGridFuture<V>(value);
   }
@@ -78,13 +74,13 @@ public class TransientDataGrid extends AbstractDataGrid {
     if (data.size() > ceilingBeforeScan) {
       scanForExpiredEntries();
     }
-    @SuppressWarnings({"unchecked"})
-    DataGridEntry<V> dataGridEntry = data.get(key);
+
+    DataGridEntry<Serializable> dataGridEntry = data.get(key);
     if (dataGridEntry != null && dataGridEntry.isExpired()) {
       data.remove(key);
       dataGridEntry = null;
     }
-    V payload = (dataGridEntry == null ? null : dataGridEntry.getPayload());
+    V payload = (dataGridEntry == null ? null : (V) dataGridEntry.getPayload());
     return new TransientDataGridFuture<V>(payload);
   }
 
@@ -94,15 +90,14 @@ public class TransientDataGrid extends AbstractDataGrid {
       scanForExpiredEntries();
     }
     @SuppressWarnings({"unchecked"})
-    DataGridEntry<V> dataGridEntry = data.get(key);
+    DataGridEntry<Serializable> dataGridEntry = data.get(key);
     if (dataGridEntry != null) {
       data.remove(key);
       if (dataGridEntry.isExpired()) {
         dataGridEntry = null;
       }
     }
-
-    V payload = (dataGridEntry == null ? null : dataGridEntry.getPayload());
+    V payload = (dataGridEntry == null ? null : (V) dataGridEntry.getPayload());
     return new TransientDataGridFuture<V>(payload);
   }
 
@@ -115,15 +110,13 @@ public class TransientDataGrid extends AbstractDataGrid {
   public <ResultType extends Serializable> ResultType map(Mapper<ResultType> mapper, Reducer<ResultType> reducer,
                                                          Filter filter) {
     List<ResultType> results = new ArrayList<ResultType>();
-    for (Serializable key : data.keySet()) {
-      Serializable value = read(key);
-      // make sure it's live data
-      if (value != null) {
-        if (filter.acceptable(key, value)) {
-          results.add(mapper.execute(value));
-        }
-      }
-    }
+
+    // in a real implementation, mapper.execute() would run for each node in the data grid.
+    // for the transient grid, however, there's only one node to work with.
+    mapper.setLocalGrid(this);
+
+    results.add(mapper.execute());
+
     return reducer.reduce(results);
   }
 }
